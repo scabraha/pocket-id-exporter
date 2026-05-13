@@ -72,6 +72,49 @@ def test_poll_once_marks_down_on_failure(poller, fake_client, metrics):
     assert _read_gauge(metrics.up) == 0
 
 
+def test_poll_failure_records_step_label(poller, fake_client, metrics):
+    fake_client.total_items.side_effect = RuntimeError("api down")
+    poller.poll_once()
+    failures = _label_values(metrics.poll_failures)
+    assert failures[("counts",)] == 1
+
+
+def test_poll_success_sets_self_monitoring_metrics(poller, metrics):
+    poller.poll_once()
+    assert _read_gauge(metrics.poll_duration) >= 0
+    assert _read_gauge(metrics.last_successful_poll) > 0
+
+
+def test_first_success_log_then_recovery_log(poller, fake_client, metrics, caplog):
+    import logging
+    caplog.set_level(logging.INFO)
+
+    poller.poll_once()
+    assert any("First successful poll" in r.message for r in caplog.records)
+    caplog.clear()
+
+    fake_client.total_items.side_effect = RuntimeError("api down")
+    poller.poll_once()
+    poller.poll_once()
+    fake_client.total_items.side_effect = lambda path: 0
+    caplog.clear()
+    poller.poll_once()
+    assert any("Recovered after" in r.message for r in caplog.records)
+
+
+def test_new_country_login_emits_warning_log(poller, fake_client, metrics, now, caplog):
+    import logging
+    caplog.set_level(logging.WARNING)
+    fake_client.fetch_audit_logs_since.return_value = [
+        _make_event(now, minutes_ago=1, username="alice", country="RU"),
+    ]
+    poller.poll_once()
+    assert any(
+        "First-seen country" in r.message and "alice" in r.message
+        for r in caplog.records
+    )
+
+
 # -- cumulative counters --------------------------------------------------
 
 

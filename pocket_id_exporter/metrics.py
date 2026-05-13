@@ -77,6 +77,30 @@ class Metrics:
             registry=registry,
         )
 
+        # ---- exporter self-monitoring ----
+        self.poll_duration = Gauge(
+            "pocketid_exporter_poll_duration_seconds",
+            "Wall-clock duration of the most recent poll cycle",
+            registry=registry,
+        )
+        self.poll_failures = Counter(
+            "pocketid_exporter_poll_failures_total",
+            "Total number of poll cycles that ended in failure",
+            ["step"],
+            registry=registry,
+        )
+        self.last_successful_poll = Gauge(
+            "pocketid_exporter_last_successful_poll_timestamp_seconds",
+            "Unix timestamp of the most recent successful poll cycle",
+            registry=registry,
+        )
+        self.geoip_lookups = Counter(
+            "pocketid_exporter_geoip_lookups_total",
+            "GeoIP lookups attempted, by result (hit/miss)",
+            ["result"],
+            registry=registry,
+        )
+
         # ---- meta ----
         self.version_info = Info(
             "pocketid_version",
@@ -105,3 +129,4 @@ def classify_ip(ip: str) -> str:
     if addr.is_private or addr.is_loopback or addr.is_link_local:
         return "internal"
     return "external"
+

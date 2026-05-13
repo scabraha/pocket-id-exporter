@@ -115,11 +115,25 @@ def test_version_unknown_when_missing(client):
 
 
 @responses.activate
-def test_get_raises_on_http_error(client):
-    responses.get("http://pocket.test/api/users", status=403)
+def test_get_raises_with_status_in_message(client):
+    responses.get("http://pocket.test/api/users", status=403, body="forbidden")
     import requests
-    with pytest.raises(requests.HTTPError):
+    with pytest.raises(requests.HTTPError) as exc_info:
         client.get("/api/users")
+    msg = str(exc_info.value)
+    assert "403" in msg
+    assert "/api/users" in msg
+    assert "POCKET_ID_API_KEY" in msg  # auth hint included
+
+
+@responses.activate
+def test_get_raises_includes_body_snippet(client):
+    responses.get("http://pocket.test/api/users", status=500,
+                  body="internal server error: db down")
+    import requests
+    with pytest.raises(requests.HTTPError) as exc_info:
+        client.get("/api/users")
+    assert "db down" in str(exc_info.value)
 
 
 def test_base_url_strips_trailing_slash():

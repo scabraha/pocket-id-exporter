@@ -20,10 +20,19 @@ class Config:
     poll_interval: int = 60
     request_timeout: int = 30
     log_level: str = "INFO"
+    log_format: str = "text"
     page_size: int = 100
     audit_window_hours: int = 24
     geoip_db_path: str = ""
     track_user_logins: bool = True
+
+    def sanitized(self) -> dict:
+        """Return the config as a dict with secrets redacted, for logging."""
+        from dataclasses import asdict
+        data = asdict(self)
+        if data.get("api_key"):
+            data["api_key"] = "***"
+        return data
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Config":
@@ -41,6 +50,10 @@ class Config:
         if not api_key:
             raise ConfigError("POCKET_ID_API_KEY is required")
 
+        log_format = env.get("LOG_FORMAT", "text").lower()
+        if log_format not in ("text", "json"):
+            raise ConfigError(f"LOG_FORMAT must be 'text' or 'json', got {log_format!r}")
+
         return cls(
             pocket_id_url=url.rstrip("/"),
             api_key=api_key,
@@ -48,6 +61,7 @@ class Config:
             poll_interval=_int(env, "POLL_INTERVAL", 60),
             request_timeout=_int(env, "REQUEST_TIMEOUT", 30),
             log_level=env.get("LOG_LEVEL", "INFO").upper(),
+            log_format=log_format,
             page_size=_int(env, "PAGE_SIZE", 100),
             audit_window_hours=_int(env, "AUDIT_WINDOW_HOURS", 24),
             geoip_db_path=env.get("GEOIP_DB_PATH", ""),

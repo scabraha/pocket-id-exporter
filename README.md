@@ -17,6 +17,10 @@ Pocket-ID ships with OpenTelemetry infrastructure but currently exposes no appli
 | `pocketid_recent_events` | Gauge | `event`, `country`, `city` | Audit events in the recent window broken down by event type and location |
 | `pocketid_recent_events_by_location` | Gauge | `location` | Audit events in the recent window (`internal` / `external` / `unknown`) |
 | `pocketid_event_geolocation` | Gauge | `country`, `city`, `latitude`, `longitude` | Audit events in the recent window grouped by geo coordinates (only when `GEOIP_DB_PATH` is set) |
+| `pocketid_exporter_poll_duration_seconds` | Gauge | — | Wall-clock duration of the most recent poll cycle |
+| `pocketid_exporter_poll_failures_total` | Counter | `step` | Poll cycles that ended in failure, labelled by which step (`version`, `counts`, `audit`) |
+| `pocketid_exporter_last_successful_poll_timestamp_seconds` | Gauge | — | Unix timestamp of the most recent successful poll |
+| `pocketid_exporter_geoip_lookups_total` | Counter | `result` | GeoIP lookups attempted (`hit` / `miss`) |
 | `pocketid_version_info` | Info | `version` | Running Pocket-ID version |
 | `pocketid_up` | Gauge | — | Whether the exporter can reach Pocket-ID |
 
@@ -62,6 +66,7 @@ POCKET_ID_API_KEY=pk_your_api_key_here
 | `TRACK_USER_LOGINS` | No | `true` | Emit per-user login counters (set `false` for very high user counts) |
 | `GEOIP_DB_PATH` | No | — | Path to a MaxMind GeoLite2-City `.mmdb` file. Enables `pocketid_event_geolocation`. |
 | `LOG_LEVEL` | No | `INFO` | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `LOG_FORMAT` | No | `text` | `text` for human-readable lines, `json` for one JSON object per line (Loki/CloudWatch friendly) |
 
 ## GeoIP
 
@@ -93,6 +98,26 @@ If the file is missing or corrupt, geolocation metrics are silently disabled —
 `pocketid_user_logins_total` and `pocketid_user_new_country_logins_total` carry a `username` label. For typical Pocket-ID deployments (tens to low hundreds of users) this is fine. If you have thousands of users, set `TRACK_USER_LOGINS=false` to suppress them.
 
 `pocketid_user_new_country_logins_total` tracks "new country" relative to **this exporter process**: a restart re-seeds the seen-countries set, so the first login per (user, country) after a restart will fire the counter again.
+
+## Observability
+
+The exporter publishes self-monitoring metrics so you can alert on it being broken (not just on Pocket-ID being broken):
+
+```promql
+# Pocket-ID is unreachable for 5+ minutes
+max_over_time(pocketid_up[5m]) == 0
+
+# Last successful poll was > 5 minutes ago
+time() - pocketid_exporter_last_successful_poll_timestamp_seconds > 300
+
+# Sustained poll failures
+rate(pocketid_exporter_poll_failures_total[10m]) > 0
+
+# A user logged in from a country never seen for them before
+increase(pocketid_user_new_country_logins_total[1h]) > 0
+```
+
+Logs use a structured key=value style at INFO and below; switch to JSON via `LOG_FORMAT=json` for log aggregators. Set `LOG_LEVEL=DEBUG` to also see per-request HTTP timings and GeoIP lookup results.
 
 ## Creating an API Key
 

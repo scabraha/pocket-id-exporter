@@ -23,6 +23,7 @@ def test_from_env_overrides():
         "POLL_INTERVAL": "10",
         "REQUEST_TIMEOUT": "5",
         "LOG_LEVEL": "debug",
+        "LOG_FORMAT": "json",
         "PAGE_SIZE": "50",
         "AUDIT_WINDOW_HOURS": "48",
         "GEOIP_DB_PATH": "/etc/geoip/GeoLite2-City.mmdb",
@@ -32,10 +33,42 @@ def test_from_env_overrides():
     assert cfg.poll_interval == 10
     assert cfg.request_timeout == 5
     assert cfg.log_level == "DEBUG"
+    assert cfg.log_format == "json"
     assert cfg.page_size == 50
     assert cfg.audit_window_hours == 48
     assert cfg.geoip_db_path == "/etc/geoip/GeoLite2-City.mmdb"
     assert cfg.track_user_logins is False
+
+
+def test_log_format_default_is_text():
+    cfg = Config.from_env({
+        "POCKET_ID_URL": "http://pocket:1411",
+        "POCKET_ID_API_KEY": "pk_test",
+    })
+    assert cfg.log_format == "text"
+
+
+def test_invalid_log_format_raises():
+    from pocket_id_exporter.config import ConfigError
+    import pytest
+    with pytest.raises(ConfigError, match="LOG_FORMAT"):
+        Config.from_env({
+            "POCKET_ID_URL": "http://x",
+            "POCKET_ID_API_KEY": "k",
+            "LOG_FORMAT": "yaml",
+        })
+
+
+def test_sanitized_redacts_api_key():
+    cfg = Config.from_env({
+        "POCKET_ID_URL": "http://pocket",
+        "POCKET_ID_API_KEY": "super-secret-key",
+    })
+    s = cfg.sanitized()
+    assert s["api_key"] == "***"
+    assert s["pocket_id_url"] == "http://pocket"
+    # Original config unchanged.
+    assert cfg.api_key == "super-secret-key"
 
 
 def test_track_user_logins_default_true():

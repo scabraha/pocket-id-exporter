@@ -28,7 +28,9 @@ class GeoIPLookup:
             ) from exc
 
         self._reader = maxminddb.open_database(db_path)
-        log.info("Loaded GeoIP database from %s", db_path)
+        meta = getattr(self._reader, "metadata", lambda: None)()
+        db_type = getattr(meta, "database_type", "GeoLite2-City")
+        log.info("Loaded GeoIP database type=%s path=%s", db_type, db_path)
 
     def lookup(self, ip: str) -> Optional[LatLon]:
         """Return ``(lat, lon)`` rounded to 4 decimals, or ``None``."""
@@ -36,14 +38,17 @@ class GeoIPLookup:
             return None
         try:
             record = self._reader.get(ip)
-        except (ValueError, KeyError):
+        except (ValueError, KeyError) as exc:
+            log.debug("GeoIP lookup failed for %s: %s", ip, exc)
             return None
         if not record:
+            log.debug("GeoIP miss for %s", ip)
             return None
         loc = record.get("location") or {}
         lat = loc.get("latitude")
         lon = loc.get("longitude")
         if lat is None or lon is None:
+            log.debug("GeoIP record for %s lacks lat/lon", ip)
             return None
         return (round(float(lat), 4), round(float(lon), 4))
 
@@ -52,3 +57,4 @@ class GeoIPLookup:
             self._reader.close()
         except Exception:  # pragma: no cover
             pass
+

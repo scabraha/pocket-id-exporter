@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any, Iterator
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+log = logging.getLogger(__name__)
 
 
 class PocketIDClient:
@@ -47,10 +51,32 @@ class PocketIDClient:
         return session
 
     def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        """GET an API path and return the parsed JSON body."""
+        """GET an API path and return the parsed JSON body.
+
+        Raises a ``requests.HTTPError`` with a message that includes the
+        status code, target path, and a short body excerpt — which is far
+        more useful in operator logs than the default Requests output.
+        """
         url = f"{self._base_url}{path}"
+        started = time.monotonic()
         resp = self._session.get(url, params=params, timeout=self._timeout)
-        resp.raise_for_status()
+        duration_ms = (time.monotonic() - started) * 1000
+
+        log.debug(
+            "HTTP GET %s -> %d in %.0fms",
+            path, resp.status_code, duration_ms,
+        )
+
+        if not resp.ok:
+            snippet = (resp.text or "")[:200].replace("\n", " ")
+            hint = ""
+            if resp.status_code in (401, 403):
+                hint = " (check POCKET_ID_API_KEY and that the key has admin scope)"
+            raise requests.HTTPError(
+                f"{resp.status_code} {resp.reason} from {path}{hint}: {snippet}",
+                response=resp,
+            )
+
         return resp.json()
 
     def total_items(self, path: str) -> int:
@@ -83,13 +109,7 @@ class PocketIDClient:
             page += 1
 
     def fetch_audit_logs_since(self, since_iso: str) -> list[dict[str, Any]]:
-        """Return audit-log entries created strictly after ``since_iso``.
-
-        Iterates oldest-first and stops paging once results predate the
-        cutoff would no longer matter (we always need the newest, which
-        come last in ascending order; for now we rely on the caller's
-        cutoff being recent and the API being reasonably bounded).
-        """
+        """Return audit-log entries created strictly after ``since_iso``."""
         return [e for e in self.iter_audit_logs(ascending=True)
                 if e.get("createdAt", "") > since_iso]
 
@@ -101,3 +121,4 @@ class PocketIDClient:
         if isinstance(data, dict):
             return str(data.get("version", "unknown"))
         return "unknown"
+
