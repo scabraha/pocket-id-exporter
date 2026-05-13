@@ -1,7 +1,17 @@
-FROM python:3.13-alpine
-WORKDIR /app
+# syntax=docker/dockerfile:1.7
+
+FROM python:3.13-alpine AS builder
+WORKDIR /build
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY exporter.py .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+FROM python:3.13-alpine
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+RUN addgroup -S exporter && adduser -S -G exporter exporter
+WORKDIR /app
+COPY --from=builder /install /usr/local
+COPY pocket_id_exporter ./pocket_id_exporter
+USER exporter
 EXPOSE 9100
-CMD ["python", "-u", "exporter.py"]
+ENTRYPOINT ["python", "-m", "pocket_id_exporter"]

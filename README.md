@@ -31,11 +31,16 @@ services:
     image: ghcr.io/scabraha/pocket-id-exporter:latest
     container_name: pocket-id-exporter
     restart: unless-stopped
-    environment:
-      - POCKET_ID_URL=http://pocket-id:1411
-      - POCKET_ID_API_KEY=pk_your_api_key_here
+    env_file: .env
     ports:
       - 9100:9100
+```
+
+`.env`:
+
+```env
+POCKET_ID_URL=http://pocket-id:1411
+POCKET_ID_API_KEY=pk_your_api_key_here
 ```
 
 ### Environment Variables
@@ -46,6 +51,9 @@ services:
 | `POCKET_ID_API_KEY` | Yes | — | Admin-scoped API key (create in Pocket-ID UI) |
 | `EXPORTER_PORT` | No | `9100` | Port to listen on |
 | `POLL_INTERVAL` | No | `60` | Seconds between API polls |
+| `REQUEST_TIMEOUT` | No | `30` | HTTP request timeout (seconds) |
+| `PAGE_SIZE` | No | `100` | Audit log page size |
+| `AUDIT_WINDOW_HOURS` | No | `24` | Window for the `recent_events_by_*` gauges |
 | `LOG_LEVEL` | No | `INFO` | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 
 ## Creating an API Key
@@ -66,11 +74,27 @@ scrape_configs:
       - targets: ["pocket-id-exporter:9100"]
 ```
 
-## Building
+## Building & Testing
 
 ```bash
+# Run tests
+python -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/pytest
+
+# Build container image
 docker build -t pocket-id-exporter .
 ```
+
+## Releases
+
+Releases are automated by [release-please](https://github.com/googleapis/release-please) using [Conventional Commits](https://www.conventionalcommits.org/):
+
+- `feat:` → minor bump
+- `fix:` / `perf:` → patch bump
+- `feat!:` or `BREAKING CHANGE:` footer → major bump
+
+On each push to `main`, release-please opens or updates a release PR with the new version and changelog. Merging it tags the release and publishes a multi-arch (`linux/amd64`, `linux/arm64`) image to `ghcr.io/scabraha/pocket-id-exporter` with tags `vX.Y.Z`, `X.Y`, `X`, and `latest`.
 
 ## License
 
