@@ -5,8 +5,8 @@
       "release-type": "python",
       "package-name": "pocket-id-exporter",
       "include-component-in-tag": false,
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true,
+      "bump-minor-pre-major": false,
+      "bump-patch-for-minor-pre-major": false,
       "extra-files": [
         {
           "type": "generic",

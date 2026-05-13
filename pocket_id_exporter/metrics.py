@@ -6,6 +6,9 @@ import ipaddress
 
 from prometheus_client import CollectorRegistry, Counter, Gauge, Info
 
+# Audit-log event names that count as user logins for the per-user metrics.
+LOGIN_EVENTS = frozenset({"SIGN_IN", "TOKEN_SIGN_IN"})
+
 
 class Metrics:
     """Container for all metrics the exporter exposes.
@@ -17,12 +20,27 @@ class Metrics:
     def __init__(self, registry: CollectorRegistry):
         self.registry = registry
 
+        # ---- counters (cumulative) ----
         self.audit_events = Counter(
             "pocketid_audit_events_total",
             "Total audit log events observed",
             ["event", "client_name"],
             registry=registry,
         )
+        self.user_logins = Counter(
+            "pocketid_user_logins_total",
+            "User login events observed, by username and country",
+            ["username", "country"],
+            registry=registry,
+        )
+        self.user_new_country_logins = Counter(
+            "pocketid_user_new_country_logins_total",
+            "First time a user has been seen logging in from a given country",
+            ["username", "country"],
+            registry=registry,
+        )
+
+        # ---- inventory gauges ----
         self.users_total = Gauge(
             "pocketid_users_total",
             "Total registered users",
@@ -38,18 +56,28 @@ class Metrics:
             "Total user groups",
             registry=registry,
         )
-        self.events_by_country = Gauge(
-            "pocketid_recent_events_by_country",
-            "Audit events in the last N hours by country",
-            ["country"],
+
+        # ---- recent-window gauges ----
+        self.recent_events = Gauge(
+            "pocketid_recent_events",
+            "Audit events in the recent window, by event type, country, and city",
+            ["event", "country", "city"],
             registry=registry,
         )
         self.events_by_location = Gauge(
             "pocketid_recent_events_by_location",
-            "Audit events in the last N hours by network location",
+            "Audit events in the recent window by network location",
             ["location"],
             registry=registry,
         )
+        self.event_geolocation = Gauge(
+            "pocketid_event_geolocation",
+            "Audit events in the recent window grouped by geo coordinates",
+            ["country", "city", "latitude", "longitude"],
+            registry=registry,
+        )
+
+        # ---- meta ----
         self.version_info = Info(
             "pocketid_version",
             "Pocket-ID version information",

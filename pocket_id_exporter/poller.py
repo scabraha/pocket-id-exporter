@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections import defaultdict
 from collections import Counter as CounterDict
 from datetime import datetime, timedelta, timezone
-from typing import Iterable
+from typing import Iterable, Optional
 
+from .audit import AuditEntry
 from .client import PocketIDClient
 from .config import Config
+from .geoip import GeoIPLookup
 from .metrics import Metrics, classify_ip
 
 log = logging.getLogger(__name__)
@@ -24,13 +27,18 @@ class Poller:
         metrics: Metrics,
         config: Config,
         *,
+        geoip: GeoIPLookup | None = None,
         clock=None,
     ):
         self._client = client
         self._metrics = metrics
         self._config = config
+        self._geoip = geoip
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._last_seen_ts: str = ""
+        self._known_user_countries: dict[str, set[str]] = defaultdict(set)
+
+    # -- public API -----------------------------------------------------
 
     def poll_once(self) -> None:
         """Run a single poll cycle, updating all metrics."""
@@ -50,6 +58,8 @@ class Poller:
             self.poll_once()
             stop_event.wait(self._config.poll_interval)
 
+    # -- inventory ------------------------------------------------------
+
     def _poll_version(self) -> None:
         self._metrics.version_info.info({"version": self._client.version()})
 
@@ -62,55 +72,102 @@ class Poller:
             self._client.total_items("/api/user-groups")
         )
 
+    # -- audit log ------------------------------------------------------
+
     def _poll_audit_data(self) -> None:
-        """Fetch recent audit logs once, then update both delta and window metrics."""
-        window_cutoff = self._clock() - timedelta(
-            hours=self._config.audit_window_hours
-        )
-        window_cutoff_iso = window_cutoff.isoformat()
+        """Fetch recent audit logs once and update all derived metrics."""
+        window_cutoff_iso = (
+            self._clock() - timedelta(hours=self._config.audit_window_hours)
+        ).isoformat()
 
         if not self._last_seen_ts:
             self._last_seen_ts = window_cutoff_iso
 
-        # Fetch only as far back as the older of the two cutoffs (window or last-seen).
         fetch_cutoff = min(self._last_seen_ts, window_cutoff_iso)
-        entries = self._client.fetch_audit_logs_since(fetch_cutoff)
+        raw_entries = self._client.fetch_audit_logs_since(fetch_cutoff)
+        entries = [AuditEntry.from_api(e) for e in raw_entries]
 
-        self._update_event_counters(entries)
-        self._update_geo_gauges(e for e in entries if e.get("createdAt", "") > window_cutoff_iso)
+        new_entries = [e for e in entries if e.created_at > self._last_seen_ts]
+        window_entries = [e for e in entries if e.created_at > window_cutoff_iso]
 
-    def _update_event_counters(self, entries: list[dict]) -> None:
-        new_events = [e for e in entries if e.get("createdAt", "") > self._last_seen_ts]
-        if not new_events:
+        self._handle_new_entries(new_entries)
+        self._update_window_metrics(window_entries)
+
+    def _handle_new_entries(self, entries: list[AuditEntry]) -> None:
+        """Update cumulative counters from events newer than the last poll."""
+        if not entries:
             return
 
         latest_ts = self._last_seen_ts
-        for entry in new_events:
-            event = entry.get("event", "UNKNOWN")
-            data = entry.get("data") or {}
-            client_name = data.get("clientName", "")
+        for entry in entries:
             self._metrics.audit_events.labels(
-                event=event, client_name=client_name
+                event=entry.event, client_name=entry.client_name
             ).inc()
-            ts = entry.get("createdAt", "")
-            if ts > latest_ts:
-                latest_ts = ts
+
+            if self._config.track_user_logins and entry.is_login and entry.username:
+                self._track_user_login(entry)
+
+            if entry.created_at > latest_ts:
+                latest_ts = entry.created_at
 
         self._last_seen_ts = latest_ts
-        log.info("Processed %d new audit events", len(new_events))
+        log.info("Processed %d new audit events", len(entries))
 
-    def _update_geo_gauges(self, entries: Iterable[dict]) -> None:
-        country_counts: CounterDict[str] = CounterDict()
-        location_counts: CounterDict[str] = CounterDict({"internal": 0, "external": 0})
+    def _track_user_login(self, entry: AuditEntry) -> None:
+        self._metrics.user_logins.labels(
+            username=entry.username, country=entry.country
+        ).inc()
+
+        seen = self._known_user_countries[entry.username]
+        if entry.country not in seen:
+            seen.add(entry.country)
+            self._metrics.user_new_country_logins.labels(
+                username=entry.username, country=entry.country
+            ).inc()
+
+    def _update_window_metrics(self, entries: Iterable[AuditEntry]) -> None:
+        """Recompute gauges that describe the recent window."""
+        events_by_geo: CounterDict = CounterDict()
+        events_by_location: CounterDict = CounterDict({"internal": 0, "external": 0})
+        events_by_coords: CounterDict = CounterDict()
 
         for entry in entries:
-            country_counts[entry.get("country") or "Unknown"] += 1
-            location_counts[classify_ip(entry.get("ipAddress", ""))] += 1
+            events_by_geo[(entry.event, entry.country, entry.city)] += 1
+            events_by_location[classify_ip(entry.ip)] += 1
+            coords = self._lookup_coords(entry.ip)
+            if coords is not None:
+                events_by_coords[(entry.country, entry.city, coords)] += 1
 
-        self._metrics.events_by_country.clear()
-        for country, count in country_counts.items():
-            self._metrics.events_by_country.labels(country=country).set(count)
+        self._set_gauge(
+            self._metrics.recent_events,
+            {("event", "country", "city"): events_by_geo},
+        )
+        self._set_gauge(
+            self._metrics.events_by_location,
+            {("location",): events_by_location},
+        )
+        if self._geoip is not None:
+            geo_with_str_coords = {
+                (country, city, f"{lat:.4f}", f"{lon:.4f}"): count
+                for (country, city, (lat, lon)), count in events_by_coords.items()
+            }
+            self._set_gauge(
+                self._metrics.event_geolocation,
+                {("country", "city", "latitude", "longitude"): geo_with_str_coords},
+            )
 
-        self._metrics.events_by_location.clear()
-        for location, count in location_counts.items():
-            self._metrics.events_by_location.labels(location=location).set(count)
+    def _lookup_coords(self, ip: str) -> Optional[tuple[float, float]]:
+        if self._geoip is None:
+            return None
+        return self._geoip.lookup(ip)
+
+    @staticmethod
+    def _set_gauge(gauge, label_data: dict) -> None:
+        """Replace a gauge's labelled values with a fresh set of samples."""
+        gauge.clear()
+        for label_names, counts in label_data.items():
+            for labels, value in counts.items():
+                if not isinstance(labels, tuple):
+                    labels = (labels,)
+                kwargs = dict(zip(label_names, labels))
+                gauge.labels(**kwargs).set(value)

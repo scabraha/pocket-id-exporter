@@ -11,6 +11,7 @@ from prometheus_client import REGISTRY, start_http_server
 
 from .client import PocketIDClient
 from .config import Config, ConfigError
+from .geoip import GeoIPLookup
 from .metrics import Metrics
 from .poller import Poller
 
@@ -43,7 +44,18 @@ def main() -> int:
         page_size=config.page_size,
     )
     metrics = Metrics(REGISTRY)
-    poller = Poller(client, metrics, config)
+
+    geoip = None
+    if config.geoip_db_path:
+        try:
+            geoip = GeoIPLookup(config.geoip_db_path)
+        except Exception:
+            log.exception(
+                "Failed to load GeoIP database at %s; geolocation metrics disabled",
+                config.geoip_db_path,
+            )
+
+    poller = Poller(client, metrics, config, geoip=geoip)
 
     stop_event = threading.Event()
 
@@ -61,3 +73,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+

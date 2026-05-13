@@ -22,6 +22,8 @@ class Config:
     log_level: str = "INFO"
     page_size: int = 100
     audit_window_hours: int = 24
+    geoip_db_path: str = ""
+    track_user_logins: bool = True
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Config":
@@ -48,6 +50,8 @@ class Config:
             log_level=env.get("LOG_LEVEL", "INFO").upper(),
             page_size=_int(env, "PAGE_SIZE", 100),
             audit_window_hours=_int(env, "AUDIT_WINDOW_HOURS", 24),
+            geoip_db_path=env.get("GEOIP_DB_PATH", ""),
+            track_user_logins=_bool(env, "TRACK_USER_LOGINS", True),
         )
 
 
@@ -59,3 +63,16 @@ def _int(env: dict[str, str], key: str, default: int) -> int:
         return int(raw)
     except ValueError as exc:
         raise ConfigError(f"{key} must be an integer, got {raw!r}") from exc
+
+
+def _bool(env: dict[str, str], key: str, default: bool) -> bool:
+    raw = env.get(key)
+    if raw is None or raw == "":
+        return default
+    lowered = raw.strip().lower()
+    if lowered in ("1", "true", "yes", "on"):
+        return True
+    if lowered in ("0", "false", "no", "off"):
+        return False
+    raise ConfigError(f"{key} must be a boolean, got {raw!r}")
+

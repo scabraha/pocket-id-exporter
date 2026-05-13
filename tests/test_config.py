@@ -25,6 +25,8 @@ def test_from_env_overrides():
         "LOG_LEVEL": "debug",
         "PAGE_SIZE": "50",
         "AUDIT_WINDOW_HOURS": "48",
+        "GEOIP_DB_PATH": "/etc/geoip/GeoLite2-City.mmdb",
+        "TRACK_USER_LOGINS": "false",
     })
     assert cfg.exporter_port == 8080
     assert cfg.poll_interval == 10
@@ -32,6 +34,28 @@ def test_from_env_overrides():
     assert cfg.log_level == "DEBUG"
     assert cfg.page_size == 50
     assert cfg.audit_window_hours == 48
+    assert cfg.geoip_db_path == "/etc/geoip/GeoLite2-City.mmdb"
+    assert cfg.track_user_logins is False
+
+
+def test_track_user_logins_default_true():
+    cfg = Config.from_env({
+        "POCKET_ID_URL": "http://pocket:1411",
+        "POCKET_ID_API_KEY": "pk_test",
+    })
+    assert cfg.track_user_logins is True
+    assert cfg.geoip_db_path == ""
+
+
+def test_invalid_bool_raises():
+    from pocket_id_exporter.config import ConfigError
+    import pytest
+    with pytest.raises(ConfigError, match="TRACK_USER_LOGINS"):
+        Config.from_env({
+            "POCKET_ID_URL": "http://pocket",
+            "POCKET_ID_API_KEY": "k",
+            "TRACK_USER_LOGINS": "maybe",
+        })
 
 
 def test_missing_url_raises():
