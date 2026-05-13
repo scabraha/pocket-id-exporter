@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/scabraha/pocket-id-exporter/compare/v1.0.0...v1.1.0) (2026-05-13)
+
+
+### Features
+
+* production-grade logging, structured output, and self-monitoring metrics ([68905c4](https://github.com/scabraha/pocket-id-exporter/commit/68905c424c86ed156b61c8ca3ec2ebcefc1f8b15))
+
 ## [1.0.0](https://github.com/scabraha/pocket-id-exporter/compare/v0.3.0...v1.0.0) (2026-05-13)
 
 
