@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0](https://github.com/scabraha/pocket-id-exporter/compare/v0.3.0...v1.0.0) (2026-05-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* pocketid_recent_events_by_country{country} has been removed; use pocketid_recent_events{event, country, city} (sum by (country) for the old behaviour). Adds maxminddb to runtime dependencies (~50 KB pure-Python).
+
+### Features
+
+* rich geolocation metrics and audit-log refactor ([ba2bdd1](https://github.com/scabraha/pocket-id-exporter/commit/ba2bdd1575c2ff940bde068cf5c330312a5a55d1))
+
 ## [0.3.0](https://github.com/scabraha/pocket-id-exporter/compare/v0.2.0...v0.3.0) (2026-05-13)
 
 
