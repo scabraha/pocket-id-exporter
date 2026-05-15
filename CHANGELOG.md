@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.2](https://github.com/scabraha/pocket-id-exporter/compare/v1.1.1...v1.1.2) (2026-05-15)
+
+
+### Bug Fixes
+
+* **deps:** update dependency requests to v2.34.2 ([d3c0d6b](https://github.com/scabraha/pocket-id-exporter/commit/d3c0d6b91be0a3efd0a9477f79cd1ef2f2813aea))
+* **deps:** update dependency requests to v2.34.2 ([a0c2417](https://github.com/scabraha/pocket-id-exporter/commit/a0c24172a78d38b2e721d72f5811b4070f7f2205))
+
 ## [1.1.1](https://github.com/scabraha/pocket-id-exporter/compare/v1.1.0...v1.1.1) (2026-05-14)
 
 
