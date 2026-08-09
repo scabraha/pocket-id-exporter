@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.3](https://github.com/scabraha/pocket-id-exporter/compare/v1.1.2...v1.1.3) (2026-08-09)
+
+
+### Bug Fixes
+
+* **deps:** update dependency prometheus-client to v0.26.0 ([5656021](https://github.com/scabraha/pocket-id-exporter/commit/5656021b37dd5cab7807b5af4e5fdafde270456d))
+* **deps:** update dependency prometheus-client to v0.26.0 ([d6c9ead](https://github.com/scabraha/pocket-id-exporter/commit/d6c9eadfb3c19cbb8c2fd4b2ecc99916d845b0ff))
+
 ## [1.1.2](https://github.com/scabraha/pocket-id-exporter/compare/v1.1.1...v1.1.2) (2026-05-15)
 
 
